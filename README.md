@@ -3,6 +3,8 @@
 * Enhanced app by adding collaborative drawing canvas, presentation sharing and video sharing.
 * Optimized application for low-bandwidth scenarios by providing an optional audio stream only toggle.
 
+Please refer to the project report pdf file for detailed summary.
+
 Features:
 * User Registry – Maintains a list of registered users in our database and allows
 only those users to use our application.
