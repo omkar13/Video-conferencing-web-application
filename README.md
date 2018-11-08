@@ -1,5 +1,7 @@
 # Video-conferencing-web-application
-Developed a multi-party video conferencing and web chat application using WebRTC, Javascript and Web-sockets with features such as canvas sharing, presentation sharing and video sharing.
+* Developed a WebRTC enabled multi-party video conferencing and web chat application
+* Enhanced app by adding collaborative drawing canvas, presentation sharing and video sharing.
+* Optimized application for low-bandwidth scenarios by providing an optional audio stream only toggle.
 
 Features:
 * User Registry – Maintains a list of registered users in our database and allows
@@ -35,12 +37,12 @@ which will be visible to all the other users.
 video file to al the other users in addition to his camera stream.
 
 Specifications:
-Application development framework: Spring (Java)
-Front end code: Javascript, AJAX, WebRTC, websockets, Apache POI, Kurento client APIs, Material design, Fabric.js
+* Application development framework: Spring (Java)
+* Front end code: Javascript, AJAX, WebRTC, websockets, Apache POI, Kurento client APIs, Material design, Fabric.js
 
 Running:
-Backend code entry point: GroupCallApp.java
-Client code entry point: index.html
+* Backend code entry point: GroupCallApp.java
+* Client code entry point: index.html
 
 References:
 * Kurento official site -https://www.kurento.org/
@@ -54,4 +56,7 @@ http://www.tutorialspoint.com/apache_poi_ppt/apache_poi_ppt_to_image.htm
 
 Contributions:
 This work was done during my summer internship at the Indian Institute of Technology Bombay in 2016.
-Development contributors: Omkar Damle (Currently at the New York University), Yash Trivedi (Currently at University of Wisconsin Madison), Rishabh Verma (Currently at Oracle)
+Development contributors: Omkar Damle (Currently at the New York University), Yash Trivedi (Currently at the University of Wisconsin Madison), Rishabh Verma (Currently at Oracle)
+Principal Investigator: Prof. D.B. Phatak
+Project In-charge: Mr. Rahul Deshmukh
+Project Mentor: Mr. Harish Satpute
