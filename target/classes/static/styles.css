@@ -1,0 +1,136 @@
+/* latin-ext */
+@font-face {
+    font-family: 'Oxygen';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Oxygen'), local('Oxygen-Regular'), url(/fonts/oxygen.woff2) format('woff2');
+    unicode-range: U+0100-024F, U+1E00-1EFF, U+20A0-20AB, U+20AD-20CF, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+    font-family: 'Oxygen';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Oxygen'), local('Oxygen-Regular'), url(/fonts/oxygen.woff2) format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2212, U+2215, U+E0FF, U+EFFD, U+F000;
+}
+
+
+body {
+    font-family: 'Oxygen', sans-serif;
+    /* overflow-y: hidden;*/
+    font-size: 1em;
+}
+
+
+canvas {
+    border: 5px solid #2E3547;
+}
+
+/** {*/
+    /*margin: 0;*/
+    /*padding: 0;*/
+    /*box-sizing: border-box;*/
+/*}*/
+
+label {
+    /*width: 100%;*/
+    display: inline-block;
+    margin-bottom: 5px;
+}
+
+input[type=range] {
+    width: 100%;
+}
+
+input[type=color] {
+    height: 30px;
+    width: 100%;
+}
+
+select {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+#drawing-options {
+    /*width: 270px;*/
+    /*position: fixed;*/
+    top: 0;
+    right: 0;
+    background: rgba(46, 53, 71, 0.9);
+    border: 5px solid #2E3547;
+    border-top: 0;
+    color: #fff;
+    padding: 5px;
+
+button {
+    padding: 5px;
+    margin: 5px 0;
+    width: 100%;
+    border: 1px solid #fff;
+
+&.warning {
+     background: #a45454;
+     border: 1px solid #ccc;
+     color: #fff;
+ }
+}
+
+select {
+    padding: 5px;
+}
+
+h2 {
+    font-size: 1em;
+    margin: 5px 0;
+}
+
+small {
+    font-size:0.6em;
+}
+}
+
+#edit-mode-options {
+    display: none;
+}
+
+#dolphin-day-container {
+    position: absolute;
+    left: 5px;
+    top: 5px;
+    font-size: 20px;
+    font-weight: italic;
+    color: #666;
+
+img {
+    width: 30px;
+    margin-bottom: -6px;
+    display:inline-block;
+}
+
+span {
+    font-size: 30px;
+}
+}
+
+.help {
+    font-size: 0.75em;
+}
+
+#download {
+    cursor:pointer;
+    color:#ccc;
+    padding:3px;
+}
+
+#download:hover {
+    color:#fff;
+}
+
+.toolboxImage{
+    cursor:pointer;
+    width: 35px;
+    height: 35px;
+    border: 2px;
+}

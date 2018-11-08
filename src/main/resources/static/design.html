@@ -1,0 +1,1034 @@
+<!doctype html>
+<html>
+<head>
+    <title>Video Conferencing Application</title>
+    <link rel="styleSheet" href="w3.css" type="text/css" media="screen">
+    <!--<link href="font-awesome.min.css" rel="stylesheet" type="text/css"/>-->
+    <!--<link href="styles.css" rel="stylesheet" type="text/css"/>-->
+
+
+
+    <script src="bower_components/adapter.js/adapter.js"></script>
+    <script src="./js/participant.js"></script>
+    <script src="./js/kurento-utils.js"></script>
+    <script src="./js/fabric.min.js"></script>
+    <script src = "./js/require.js"></script>
+    <script src="./js/conferenceroom.js"></script>
+
+    <style>
+        @media only screen and (max-width : 540px)
+        {
+            .chat-sidebar
+            {
+                display: none !important;
+            }
+
+            .chat-popup
+            {
+                display: none !important;
+            }
+        }
+
+        html, body
+        {
+            background-color: #f5f7f8;
+            height: 69%;
+            /*min-height: inherit;*/
+        }
+
+        .chat-sidebar
+        {
+            height: 25%;
+            overflow-y: auto;
+        }
+
+        .sidebar-name
+        {
+            padding-left: 10px;
+            padding-right: 10px;
+            margin-top: 4px;
+            font-size: 12px;
+        }
+
+        .sidebar-name span
+        {
+            display: block;
+            height: 27px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .sidebar-name:hover
+        {
+            background-color:#e1e2e5;
+        }
+
+        .sidebar-name img
+        {
+            width: 32px;
+            height: 32px;
+            vertical-align:middle;
+        }
+
+        .popup-box
+        {
+            display: none;
+            position: fixed;
+            bottom: 0px;
+            right: 22px;
+            height: 285px;
+            background-color: rgb(237, 239, 244);
+            width: 225px;
+            border: 1px solid rgba(29, 49, 91, .3);
+        }
+
+        .popup-box .popup-head
+        {
+            background-color: #6d84b4;
+            padding: 5px;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            clear: both;
+        }
+
+        .popup-box .popup-head .popup-head-left
+        {
+            float: left;
+        }
+
+        .popup-box .popup-head .popup-head-right
+        {
+            float: right;
+            opacity: 0.5;
+        }
+
+        .popup-box .popup-head .popup-head-right a
+        {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .popup-box .popup-messages
+        {
+            height: 80%;
+            overflow-y: scroll;
+        }
+
+        .public-chat {
+            /*height: 60%;*/
+            overflow-y: auto;
+        }
+
+        .public-chat li {
+            word-wrap: break-word;
+        }
+
+
+
+        .sidebar-name span {
+            display: inline-block;
+            font-size: 16px;
+        }
+
+        .sidebar-name button {
+            margin-left: 10px;
+            float: right;
+        }
+
+
+        .toolboxImage{
+            cursor:pointer;
+            width: 25px;
+            height: 25px;
+            /*border: 2px;*/
+        }
+
+
+    </style>
+
+    <script>
+
+        //this function can remove a array element.
+        Array.remove = function(array, from, to) {
+            var rest = array.slice((to || from) + 1 || array.length);
+            array.length = from < 0 ? array.length + from : from;
+            return array.push.apply(array, rest);
+        };
+
+        //this variable represents the total number of popups can be displayed according to the viewport width
+        var total_popups = 0;
+
+        //arrays of popups ids
+        var popups = [];
+
+        //this is used to close a popup
+        function close_popup(id) {
+            for(var iii = 0; iii < popups.length; iii++) {
+                if(id == popups[iii]) {
+                    Array.remove(popups, iii);
+                    document.getElementById(id).style.display = "none";
+                    calculate_popups();
+                    return;
+                }
+            }
+        }
+
+        //displays the popups. Displays based on the maximum number of popups that can be displayed on the current viewport width
+        function display_popups() {
+            var right = 0.25 * screen.availWidth;
+            var iii = 0;
+            for(iii; iii < total_popups; iii++) {
+                if(popups[iii] != undefined) {
+                    var element = document.getElementById(popups[iii]);
+                    element.style.right = right + "px";
+                    right = right + 245;
+                    element.style.display = "block";
+                }
+            }
+
+            for(var jjj = iii; jjj < popups.length; jjj++) {
+                var element = document.getElementById(popups[jjj]);
+                element.style.display = "none";
+            }
+        }
+
+        //creates markup for a new popup. Adds the id to popups array.
+        function register_popup(btn) {
+            var id = btn.name + 'popup';
+            var localname = btn.name;
+
+            for(var iii = 0; iii < popups.length; iii++) {
+                //already registered. Bring it to front.
+                if(id == popups[iii]) {
+                    Array.remove(popups, iii);
+                    popups.unshift(id);
+                    calculate_popups();
+                    return;
+                }
+            }
+
+            var parser = new DOMParser();
+
+            var element = '<div class="popup-box chat-popup" id="'+ id +'">';
+            element = element + '<div class="popup-head">';
+            element = element + '<div class="popup-head-left">'+ localname +'</div>';
+            element = element + '<div class="popup-head-right"><a href="javascript:close_popup(\''+ id +'\');">&#10005;</a></div>';
+            element = element + '<div style="clear: both"></div></div>' +
+                    '<div class="popup-messages">' +
+                    '<ul class="w3-ul" id="'+btn.name+'list"></ul></div>' +
+                    '<input type="text" placeholder="Send Message..." id="'+btn.name+'input" name="'+btn.name+'" onkeyup="privateChatEnterKey(event, this)"; /></div>';
+
+            doc = parser.parseFromString(element, "text/html");
+            document.getElementsByTagName("body")[0].appendChild(doc.firstChild.firstChild.nextSibling.firstChild);
+
+            popups.unshift(id);
+            calculate_popups();
+        }
+
+        //calculate the total number of popups suitable and then populate the toatal_popups variable.
+        function calculate_popups() {
+            var width = window.innerWidth;
+            if(width < 540) {
+                total_popups = 0;
+            }
+            else {
+                width = width - 200;
+                //320 is width of a single popup box
+                total_popups = parseInt(width/225);
+            }
+            display_popups();
+        }
+
+        //recalculate when window is loaded and also when window is resized.
+        window.addEventListener("resize", calculate_popups);
+        window.addEventListener("load", calculate_popups);
+
+    </script>
+
+</head>
+<body style="height: 100%">
+<div id="join" class="w3-animate-opacity w3-card-12" style="margin: 10%;">
+    <div class="w3-container w3-center w3-blue">
+        <h1>Join a Room</h1>
+    </div>
+    <form onsubmit="register(); return false;" accept-charset="UTF-8" class="w3-container w3-light-grey">
+        <p>
+        <label class="w3-label w3-text-blue-grey">Username</label>
+        <input class="w3-input" type="text" name="name" value="" id="name" placeholder="Username" required />
+            </p>
+        <p>
+        <label class="w3-label w3-text-blue-grey">Room</label>
+        <input class="w3-input" type="text" name="room" value="" id="roomName" placeholder="Room" required>
+            </p>
+        <p class="w3-center">
+        <button class="w3-btn w3-ripple w3-blue w3-large w3-padding-4" type="submit" name="commit" value="Join!">Join!</button>
+        </p>
+    </form>
+</div>
+<div id="room" class="w3-animate-bottom" style="display:none;height: 100%;">
+    <div id="headerRow" class="w3-row w3-indigo w3-container">
+        <div id="headerLeft" class="w3-col m3">
+            <label>Meeting Participants: </label><span id = "noOfUsers"></span><br>
+            <label>Time Since Beginning: </label><span id = "time"></span><br>
+            <label>Date: </label><span id = "date"></span>
+        </div>
+        <div id="headerMain" class="w3-col m6 w3-center">
+            <h2>Conferencing Application</h2>
+        </div>
+        <div id="headerRight" class="w3-col m3 w3-right-align">
+            <label class="w3-xlarge">Welcome:</label><span class="w3-xlarge" id="userNameDisplay"></span><br/>
+            <label class="w3-large">Room:</label><span class="w3-large" id="roomNameDisplay"></span>
+        </div>
+    </div>
+    <div id="wrapper" class="w3-row" style="height: 100%;">
+        <div id="wrapper-left" class="w3-col m9">
+            <ul class="w3-navbar">
+                <li class="w3-border w3-text-white w3-green w3-card-4 w3-hover-shadow"><a href="#" onclick="showCanvas();return false;">Canvas Mode</a></li>
+                <li class="w3-border w3-green w3-text-white w3-card-4 w3-hover-shadow"><a href="#" onclick="hideCanvas();return false;">Videos Mode</a></li>
+                <li class="w3-border w3-green w3-text-white w3-card-4 w3-hover-shadow"><a href="#" onclick="showPresentation();return false;">Presentation Mode</a></li>
+                <li class="w3-border w3-green  w3-text-white w3-card-4 w3-hover-shadow"><a href="#" onclick="leaveRoom();return false;">Logout</a></li>
+            </ul>
+            <div style="display: none;" id="canvasWrapper" class="w3-row">
+                <div id="toolbar" class="w3-col m1">
+                    <div id="drawing-options">
+                        <button id="drawing-mode" class="w3-btn w3-hover-blue w3-tiny w3-padding-tiny w3-amber" style="width: 100%">Edit scene</button>
+                        <table class="w3-table-all w3-responsive w3-padding-0" id ="drawing-mode-options">
+                            <tr>
+                                <td colspan="2">
+                                <div class="w3-padding-tiny w3-half">RTD</div>
+                                <button id = "realTimeDrawing" class="w3-padding-tiny w3-btn w3-tiny w3-amber" >enable</button>
+                                    </td>
+                              </tr>
+                            <tr>
+                                <td colspan="2">
+                                <span>Image</span>
+                                <input type="file" id="imgLoader" class="w3-padding-tiny w3-btn w3-tiny w3-amber" style="width:90%">
+                                    </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <label for="stroke-color" class="w3-label w3-text-black">Stroke</label>
+                                    <input type="color" class="" style = "height : 25px;width:25px;" id="stroke-color">
+                                </td>
+                                <td>
+                                    <label for="fill-color" class="w3-label w3-text-black">Fill</label>
+                                    <input type="color" id="fill-color"  class="" style = "height : 25px;width:25px;">
+                                </td>
+                            </tr>
+                            <!--<div id="drawing-mode-options" style="display: inline-block>-->
+                            <tr>
+                                <td colspan="2">
+                                    <select id="drawing-mode-selector">
+                                        <option value="pencil">PENCIL</option>
+                                    </select>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td colspan="2">
+                                    <label for="drawing-line-width" style="color: black" class="w3-small">Brush Width: </label>
+                                    <label id="drawing-line-width-info" class="w3-small">3</label>
+                                    <input type="range" value="3" min="0" max="150" id="drawing-line-width" style = "width : 100%;">
+                                </td>
+
+                            </tr>
+                            <!--<button id="insert-text" class="btn btn-info">text</button>-->
+                            <!--<button id="insert-line">Line</button>-->
+
+
+                            <tr>
+                                <td>
+                                    <img id="insert-text" class = "toolboxImage" src="textBox.png" alt="text box" >
+                                </td>
+                                <td>
+                                    <img id="insert-line" class = "toolboxImage" src="line.png" alt="line">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <img id="insert-circle" class = "toolboxImage" src="circle.png" alt="circle">
+                                </td>
+                                <td>
+                                    <img id="insert-rectangle" class = "toolboxImage" src="rectangle.png" alt="rectangle">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <img id="insert-triangle" class = "toolboxImage" src="triangle.png" alt="triangle">
+                                </td>
+                                <td>
+                                    <img id="eraserImage" class = "toolboxImage" src="eraser.png" alt="eraser">
+                                    <button id = "eraser" class="w3-btn w3-padding-tiny w3-tiny w3-amber">enable</button>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td>
+                                    <img id="undo" class = "toolboxImage" src="undo.png" alt="undo">
+                                </td>
+                                <td>
+                                    <img id="redo" class = "toolboxImage" src="redo.png" alt="redo">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <img id="clear-canvas" class = "toolboxImage" src="clear.png" alt="clear">
+                                </td>
+                                <td>
+                                    <a id = "download"><img class = "toolboxImage" src="download.png" alt="download" /></a>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div id="edit-mode-options" style="display:none;">
+                        <!--<button id="clear-canvas" class="btn warning">Clear Canvas</button><br>-->
+                        <table class="w3-table-all w3-responsive" >
+                            <tr>
+                                <td>
+                                    <label for="stroke-color_edit" class="w3-label">Stroke</label>
+                                    <input type="color"  style = "height : 25px; width : 25px;" id="stroke-color_edit">
+                                </td>
+                                <td>
+                                    <label for="fill-color_edit" class="w3-label">Fill</label>
+                                    <input type="color" id="fill-color_edit"   style = "height : 25px; width : 25px;">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <img id="undo_edit" class = "toolboxImage" src="undo.png" alt="undo">
+                                </td>
+                                <td>
+                                    <img id="redo_edit" class = "toolboxImage" src="redo.png" alt="redo">
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <img id="clear-canvas_edit" class = "toolboxImage" src="clear.png" alt="clear">
+                                </td>
+                                <td>
+                                    <a id = "download_edit"><img class = "toolboxImage" src="download.png" alt="download" /></a>
+                                </td>
+                            </tr>
+                        </table>
+                        <!--<h3>Minihelp</h3>-->
+                        <!--<ul class="help">-->
+                            <!--<li><em>Delete</em> Removes a selected object</li>-->
+                            <!--<li><em>Page Up</em> Brings a selected object forward</li>-->
+                            <!--<li><em>Page Down</em> Sends a selected object backward</li>-->
+                        <!--</ul>-->
+                    </div>
+                    <!--</div>-->
+
+                    <button id = "save" class="w3-btn w3-hover-blue w3-tiny w3-padding-tiny w3-amber" style="width: 100%">Send to Server</button>
+
+
+                </div>
+
+                <div id="canvasBoard" class="w3-border w3-col m9 w3-right w3-margin">
+                    <canvas id="c"></canvas>
+                </div>
+                <div class="w3-col w3-rest">
+
+                    </div>
+            </div >
+            <div style="display: none;" id="presentationWrapper" class="w3-margin-top w3-container">
+                <div class="w3-center">
+                    <img class="w3-card-4" id="presentation" src="img_avatar2.png" height="487.875" width="867.3333333333334"/>
+                </div>
+                <div class="w3-container w3-center">
+                    <a id="previousPresentstionSlide" class="w3-btn-floating-large w3-light-green w3-hover-red w3-margin-top w3-margin-right w3-margin-left w3-text-white">< </a>
+                    <a id="nextPresentstionSlide" class="w3-btn-floating-large w3-light-green w3-hover-red w3-margin-top w3-margin-right w3-margin-left w3-text-white">></a>
+                </div>
+            </div>
+            <div id="videoWrapper" class="w3-container ">
+                <div id="videoBigDiv" class="w3-card-8 w3-container w3-amber" style="display:none;">
+                        <span onclick="this.parentElement.style.display='none'" class="w3-closebtn">&times;</span>
+                        <div class="w3-center" id="bigVideoUserName"></div>
+                        <video id="bigVideo" src="" height="480" width="640"></video>
+                </div>
+                <div id="videos" class="w3-margin-top">
+                    <div class="w3-border w3-light-grey w3-card-4 w3-hover-opacity" style="display: inline-block">
+                        <video class="video-item" src="" height="120" width="160"></video>
+                        <div class="w3-container w3-indigo w3-hover-deep-orange w3-center" >You</div>
+                    </div>
+                    <div class="w3-border w3-light-grey w3-card-4 w3-hover-opacity" style="display: inline-block">
+                        <video class="video-item" src="" height="120" width="160"></video>
+                        <div class="w3-container w3-indigo w3-hover-deep-orange w3-center" >You</div>
+                    </div>
+                    <div class="w3-border w3-light-grey w3-card-4 w3-hover-opacity" style="display: inline-block">
+                        <video class="video-item" src="" height="120" width="160"></video>
+                        <div class="w3-container w3-indigo w3-hover-deep-orange w3-center" >You</div>
+                    </div>
+                    <div class="w3-border w3-light-grey w3-card-4 w3-hover-opacity" style="display: inline-block">
+                        <video class="video-item" src="" height="120" width="160"></video>
+                        <div class="w3-container w3-indigo w3-hover-deep-orange w3-center" >You</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="wrapper-right" class="w3-col m3" style="height:100%;">
+            <div id="participantList" style="height : 50%; display: ;" class="" >
+                <div class="w3-center w3-border-bottom w3-large w3-green">Participants</div>
+                <div class="w3-card w3-round-large"  style="height:87%;overflow-y:auto;">
+                    <ul id="chatSidebar" class="w3-ul" style="">
+                        <li class="w3-padding-8 w3-hover-khaki">
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity">Get Audio</button>
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity" onclick="register_popup('narayan-prusty', 'Narayan Prusty');">Chat</button>
+                            <img src="img_avatar2.png" class="w3-left w3-circle w3-margin-right w3-margin-left" style="width:25px;" />
+                            <span class="w3-small ">Joe Trivedi</span>
+                        </li>
+                        <li class="w3-padding-8 w3-hover-khaki">
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity">Get Audio</button>
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity" onclick="register_popup('narayan-prusty', 'Narayan Prusty');">Chat</button>
+                            <img src="img_avatar2.png" class="w3-left w3-circle w3-margin-right w3-margin-left" style="width:25px;" />
+                            <span class="w3-small">Joe Trivedi</span>
+                        </li>
+                        <li class="w3-padding-8 w3-hover-khaki">
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity">Get Audio</button>
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity" onclick="register_popup('narayan-prusty', 'Narayan Prusty');">Chat</button>
+                            <img src="img_avatar2.png" class="w3-left w3-circle w3-margin-right w3-margin-left" style="width:25px;" />
+                            <span class="w3-small">Joe Trivedi</span>
+                        </li>
+                        <li class="w3-padding-8 w3-hover-khaki">
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity">Get Audio</button>
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity" onclick="register_popup('narayan-prusty', 'Narayan Prusty');">Chat</button>
+                            <img src="img_avatar2.png" class="w3-left w3-circle w3-margin-right w3-margin-left" style="width:25px;" />
+                            <span class="w3-small">Joe Trivedi</span>
+                        </li>
+                        <li class="w3-padding-8 w3-hover-khaki">
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity">Get Audio</button>
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity" onclick="register_popup('narayan-prusty', 'Narayan Prusty');">Chat</button>
+                            <img src="img_avatar2.png" class="w3-left w3-circle w3-margin-right w3-margin-left" style="width:25px;" />
+                            <span class="w3-small">Joe Trivedi</span>
+                        </li>
+                        <li class="w3-padding-8 w3-hover-khaki">
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity">Get Audio</button>
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity" onclick="register_popup('narayan-prusty', 'Narayan Prusty');">Chat</button>
+                            <img src="img_avatar2.png" class="w3-left w3-circle w3-margin-right w3-margin-left" style="width:25px;" />
+                            <span class="w3-small">Joe Trivedi</span>
+                        </li>
+                        <li class="w3-padding-8 w3-hover-khaki">
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity">Get Audio</button>
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity" onclick="register_popup('narayan-prusty', 'Narayan Prusty');">Chat</button>
+                            <img src="img_avatar2.png" class="w3-left w3-circle w3-margin-right w3-margin-left" style="width:25px;" />
+                            <span class="w3-small">Joe Trivedi</span>
+                        </li>
+                        <li class="w3-padding-8 w3-hover-khaki">
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity">Get Audio</button>
+                            <button class="w3-closebtn w3-btn w3-tiny w3-margin-right w3-light-blue w3-hover-opacity" onclick="register_popup('narayan-prusty', 'Narayan Prusty');">Chat</button>
+                            <img src="img_avatar2.png" class="w3-left w3-circle w3-margin-right w3-margin-left" style="width:25px;" />
+                            <span class="w3-small">Joe Trivedi</span>
+                        </li>
+
+                    </ul>
+                </div>
+            </div>
+            <div id="presenterVideoWrapper" style="display:none;" class="w3-card-4 w3-center">
+                    <video id="presenterVideo" class="w3-border" width="289.1111111111111" height="216.83333333333334"></video>
+            </div>
+            <div class="" style="height:66.5%;">
+                <div class="w3-center w3-border-bottom w3-large w3-green">Room Chat</div>
+                <ul id="publicChat" class="public-chat w3-ul w3-card-4 w3-round-large" style="overflow-y:auto;height:100%;">
+
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                    <li tabindex="1" style="text-align: right;"><b>jdsk</b>: mbfhdkjfhskd</li>
+                </ul>
+                <input type="text" style="" onkeyup="publicChatEnterKey(event, this);" placeholder="Send Message..." class="w3-input"  id="publicChatSend"/>
+            </div>
+        </div>
+     </div>
+</div>
+
+
+<!--<div id="room">-->
+    <!--<div>-->
+        <!--<header class="w3-container w3-dark-grey">-->
+            <!--<div id="headerLeft" class="w3-container w3-quarter">-->
+                <!--<label>Meeting Participants: </label><span id = "noOfUsers"></span><br>-->
+                <!--<label>Time Since Beginning: </label><span id = "time"></span><br>-->
+                <!--<label>Date: </label><span id = "date"></span>-->
+            <!--</div>-->
+            <!--<div id="headerMain" class="w3-container w3-half w3-center">-->
+                <!--<h2>Conferencing Application</h2>-->
+            <!--</div>-->
+            <!--<div id="headerRight" class="w3-container w3-quarter w3-right-align">-->
+                <!--<label class="w3-xlarge">Welcome: </label><span class="w3-xlarge" id="userNameDisplay"></span><br>-->
+                <!--<label class="w3-large">Room: </label><span class="w3-large" id="roomNameDisplay"></span>-->
+            <!--</div>-->
+        <!--</header>-->
+    <!--</div>-->
+    <!--<div id="wrapper" style="height: inherit;">-->
+        <!--<div id="wrapper-left" class="wrapper-left">-->
+            <!--<div id="menu" style="width: 50%; margin: 0 auto" class="w3-center">-->
+                <!--<div class="w3-card-2 w3-hover-light-green w3-quarter w3-white" onclick="showCanvas();return false;">Canvas</div>-->
+                <!--<div class="w3-card-2 w3-hover-light-green w3-quarter w3-white" onclick="hideCanvas();return false;">Videos</div>-->
+                <!--<div class="w3-card-2 w3-hover-light-green w3-quarter w3-white" onclick="hideBigVideo(); return false;">Hide Big Video</div>-->
+                <!--<div class="w3-card-2 w3-hover-light-green w3-quarter w3-white" onclick="leaveRoom();">Logout</div>-->
+            <!--</div>-->
+            <!--<div id="canvasWrapper" >-->
+                <!--<div id="toolbar">-->
+
+
+                    <!--&lt;!&ndash;<div id="drawing-options" style = "overflow-y:scroll;">&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id="drawing-mode" class="btn btn-info">Edit scene</button><br>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<label for="stroke-color">Stroke Color</label>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<input type="color" width = "50" id="stroke-color"><br/>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<label for="fill-color">Fill Color</label>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<input type="color" id="fill-color" width = "50"><br/><br/>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<div id="drawing-mode-options">&ndash;&gt;-->
+
+                    <!--&lt;!&ndash;<label for="drawing-mode-selector">Brush Type</label>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<select id="drawing-mode-selector">&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="pencil">Pencil</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="circle">Circle</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="spray">Spray (DB-Intensive)</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="hline">Horizontal lines</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="vline">Vertical lines</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="square">Squares</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="diamond">Diamonds</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;</select>&ndash;&gt;-->
+
+                    <!--&lt;!&ndash;<label for="drawing-line-width">Brush Width</label>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<span id="drawing-line-width-info">3</span>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<input type="range" value="3" min="0" max="150" id="drawing-line-width"><br/>&ndash;&gt;-->
+
+                    <!--&lt;!&ndash;<button id="insert-text" class="btn btn-info">text</button>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id="insert-line">Line</button>&ndash;&gt;-->
+
+                    <!--&lt;!&ndash;<br/>&ndash;&gt;-->
+                    <!--&lt;!&ndash;&lt;!&ndash;&ndash;&gt;-->
+                    <!--&lt;!&ndash;<label for="shape-selector">Shape</label>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<select id="shape-selector">&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="rectangle">Rectangle</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="circle">Circle</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="triangle">Triangle</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<option value="ellipse">Ellipse</option>&ndash;&gt;-->
+                    <!--&lt;!&ndash;</select>&ndash;&gt;-->
+                    <!--&lt;!&ndash;&ndash;&gt;&ndash;&gt;-->
+                    <!--&lt;!&ndash;<br/>&ndash;&gt;-->
+
+                    <!--&lt;!&ndash;<div>Shapes :</div>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id = "insert-circle">Circle</button>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id = "insert-rectangle">Rectangle</button>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id = "insert-triangle">Triangle</button>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<br/>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<span>Eraser : </span>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id = "eraser">enable</button>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<br/>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<span>Real time drawing : </span>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id = "realTimeDrawing">enable</button>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<span>Insert Image : </span>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<input type="file" id="imgLoader">&ndash;&gt;-->
+                    <!--&lt;!&ndash;<br/>&ndash;&gt;-->
+
+                    <!--&lt;!&ndash;</div>&ndash;&gt;-->
+
+                    <!--&lt;!&ndash;<div id="edit-mode-options">&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id="clear-canvas" class="btn warning">Clear Canvas</button><br>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<h2>Minihelp</h2>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<ul class="help">&ndash;&gt;-->
+                    <!--&lt;!&ndash;<li><em>Delete</em> removes a selected object</li>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<li><em>Page Up</em> brings a selected object forward</li>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<li><em>Page Down</em> sends a selected object backward</li>&ndash;&gt;-->
+                    <!--&lt;!&ndash;</ul>&ndash;&gt;-->
+
+                    <!--&lt;!&ndash;</div>&ndash;&gt;-->
+
+
+                    <!--&lt;!&ndash;<span>Controls : </span>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<br/>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id = 'undo'>undo</button>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id = 'redo'>redo</button>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<button id = "save">send to server</button>&ndash;&gt;-->
+                    <!--&lt;!&ndash;<a id="download">Download</a>&ndash;&gt;-->
+
+
+                    <!--&lt;!&ndash;</div>&ndash;&gt;-->
+
+                    <!--<div id="drawing-options">-->
+                        <!--<button id="drawing-mode" class="w3-btn w3-white w3-hover-blue w3-round ">Edit scene</button><br/>-->
+                        <!--<table class="w3-table-all w3-card-4 w3-responsive" id ="drawing-mode-options" >-->
+                            <!--<tr>-->
+                                <!--<td>-->
+                                    <!--<label for="stroke-color" class="w3-label">Stroke</label>-->
+                                    <!--<input type="color" class="w3-input" style = "height : 60px; width : 60px;" id="stroke-color">-->
+                                <!--</td>-->
+                                <!--<td>-->
+                                    <!--<label for="fill-color" class="w3-label">Fill</label>-->
+                                    <!--<input type="color" id="fill-color"  class="w3-input" style = "height : 60px; width : 60px;"><br/><br/>-->
+                                <!--</td>-->
+                            <!--</tr>-->
+                            <!--&lt;!&ndash;<div id="drawing-mode-options" style="display: inline-block>&ndash;&gt;-->
+                            <!--<tr>-->
+                                <!--<td colspan="2">-->
+                                    <!--<select id="drawing-mode-selector">-->
+                                        <!--<option value="pencil">PENCIL</option>-->
+                                        <!--&lt;!&ndash;<option value="circle">Circle</option>&ndash;&gt;-->
+                                        <!--&lt;!&ndash;<option value="spray">Spray (DB-Intensive)</option>&ndash;&gt;-->
+                                        <!--&lt;!&ndash;<option value="hline">Horizontal lines</option>&ndash;&gt;-->
+                                        <!--&lt;!&ndash;<option value="vline">Vertical lines</option>&ndash;&gt;-->
+                                        <!--&lt;!&ndash;<option value="square">Squares</option>&ndash;&gt;-->
+                                        <!--&lt;!&ndash;<option value="diamond">Diamonds</option>&ndash;&gt;-->
+                                    <!--</select>-->
+                                <!--</td>-->
+                            <!--</tr>-->
+
+                            <!--<tr>-->
+                                <!--<td colspan="2">-->
+                                    <!--<label for="drawing-line-width" style="color: black">Brush Width</label>-->
+                                    <!--<span id="drawing-line-width-info">3</span>-->
+                                    <!--<input type="range" value="3" min="0" max="150" id="drawing-line-width" style = "width : 100px;"><br/>-->
+                                <!--</td>-->
+
+                            <!--</tr>>-->
+                            <!--&lt;!&ndash;<button id="insert-text" class="btn btn-info">text</button>&ndash;&gt;-->
+                            <!--&lt;!&ndash;<button id="insert-line">Line</button>&ndash;&gt;-->
+
+
+                            <!--<tr>-->
+                                <!--<td>-->
+                                    <!--<img id="insert-text" class = "toolboxImage" src="textBox.png" alt="text box" >-->
+                                <!--</td>-->
+                                <!--<td>-->
+                                    <!--<img id="insert-line" class = "toolboxImage" src="line.png" alt="line">-->
+                                <!--</td>-->
+                            <!--</tr>-->
+                            <!--<tr>-->
+                                <!--<td>-->
+                                    <!--<img id="insert-circle" class = "toolboxImage" src="circle.png" alt="circle">-->
+                                <!--</td>-->
+                                <!--<td>-->
+                                    <!--<img id="insert-rectangle" class = "toolboxImage" src="rectangle.png" alt="rectangle">-->
+                                <!--</td>-->
+                            <!--</tr>-->
+                            <!--<tr>-->
+                                <!--<td>-->
+                                    <!--<img id="insert-triangle" class = "toolboxImage" src="triangle.png" alt="triangle">-->
+                                <!--</td>-->
+                                <!--<td>-->
+                                    <!--<img id="eraserImage" class = "toolboxImage" src="eraser.png" alt="eraser">-->
+                                    <!--<button id = "eraser">enable</button>-->
+                                <!--</td>-->
+                            <!--</tr>-->
+
+
+                            <!--&lt;!&ndash;<br/>&ndash;&gt;-->
+                            <!--&lt;!&ndash;-->
+                            <!--<label for="shape-selector">Shape</label>-->
+                            <!--<select id="shape-selector">-->
+                                <!--<option value="rectangle">Rectangle</option>-->
+                                <!--<option value="circle">Circle</option>-->
+                                <!--<option value="triangle">Triangle</option>-->
+                                <!--<option value="ellipse">Ellipse</option>-->
+                            <!--</select>-->
+                            <!--&ndash;&gt;-->
+                            <!--&lt;!&ndash;<br/>&ndash;&gt;-->
+
+                            <!--&lt;!&ndash;<div>Shapes :</div>&ndash;&gt;-->
+                            <!--&lt;!&ndash;<button id = "insert-circle">Circle</button>&ndash;&gt;-->
+                            <!--&lt;!&ndash;<button id = "insert-rectangle">Rectangle</button>&ndash;&gt;-->
+                            <!--&lt;!&ndash;<button id = "insert-triangle">Triangle</button>&ndash;&gt;-->
+                            <!--&lt;!&ndash;<br/>&ndash;&gt;-->
+
+                            <!--&lt;!&ndash;<span>Eraser : </span>&ndash;&gt;-->
+
+
+                            <!--<span>Real time drawing : </span>-->
+                            <!--<button id = "realTimeDrawing">enable</button><br/>-->
+                            <!--<span>Insert Image : </span>-->
+                            <!--<input type="file" id="imgLoader"><br/>-->
+
+
+
+
+
+
+                            <!--&lt;!&ndash;<button id = 'undo'>undo</button>&ndash;&gt;-->
+                            <!--&lt;!&ndash;<button id = 'redo'>redo</button>&ndash;&gt;-->
+
+
+                            <!--&lt;!&ndash;<a id="download">Download</a>&ndash;&gt;-->
+
+                            <!--<tr>-->
+                                <!--<td>-->
+                                    <!--<img id="undo" class = "toolboxImage" src="undo.png" alt="undo">-->
+                                <!--</td>-->
+                                <!--<td>-->
+                                    <!--<img id="redo" class = "toolboxImage" src="redo.png" alt="redo">-->
+                                <!--</td>-->
+                            <!--</tr>-->
+                            <!--<tr>-->
+                                <!--<td>-->
+                                    <!--<img id="clear-canvas" class = "toolboxImage" src="clear.png" alt="clear">-->
+                                <!--</td>-->
+                                <!--<td>-->
+                                    <!--<a id = "download"><img class = "toolboxImage" src="download.png" alt="download" /></a>-->
+                                <!--</td>-->
+                            <!--</tr>-->
+                        <!--</table>-->
+                    <!--</div>-->
+                    <!--<div id="edit-mode-options">-->
+                        <!--&lt;!&ndash;<button id="clear-canvas" class="btn warning">Clear Canvas</button><br>&ndash;&gt;-->
+                        <!--<table class="w3-table-all w3-card-4 w3-responsive" >-->
+                            <!--<tr>-->
+                                <!--<td>-->
+                                    <!--<label for="stroke-color_edit" class="w3-label">Stroke</label>-->
+                                    <!--<input type="color" class="w3-input" style = "height : 60px; width : 60px;" id="stroke-color_edit">-->
+                                <!--</td>-->
+                                <!--<td>-->
+                                    <!--<label for="fill-color_edit" class="w3-label">Fill</label>-->
+                                    <!--<input type="color" id="fill-color_edit"  class="w3-input" style = "height : 60px; width : 60px;"><br/><br/>-->
+                                <!--</td>-->
+                            <!--</tr>-->
+                            <!--<tr>-->
+                                <!--<td>-->
+                                    <!--<img id="undo_edit" class = "toolboxImage" src="undo.png" alt="undo">-->
+                                <!--</td>-->
+                                <!--<td>-->
+                                    <!--<img id="redo_edit" class = "toolboxImage" src="redo.png" alt="redo">-->
+                                <!--</td>-->
+                            <!--</tr>-->
+                            <!--<tr>-->
+                                <!--<td>-->
+                                    <!--<img id="clear-canvas_edit" class = "toolboxImage" src="clear.png" alt="clear">-->
+                                <!--</td>-->
+                                <!--<td>-->
+                                    <!--<a id = "download_edit"><img class = "toolboxImage" src="download.png" alt="download" /></a>-->
+                                <!--</td>-->
+                            <!--</tr>-->
+                        <!--</table>-->
+                        <!--<h3>Minihelp</h3>-->
+                        <!--<ul class="help">-->
+                            <!--<li><em>Delete</em> Removes a selected object</li>-->
+                            <!--<li><em>Page Up</em> Brings a selected object forward</li>-->
+                            <!--<li><em>Page Down</em> Sends a selected object backward</li>-->
+                        <!--</ul>-->
+                    <!--</div>-->
+                    <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                    <!--<button id = "save">send to server</button>-->
+
+
+                <!--</div>-->
+
+                <!--<div id="canvasBoard" class="w3-right">-->
+                    <!--<canvas id="c" height="600" width="800"></canvas>-->
+                <!--</div>-->
+            <!--</div>-->
+            <!--<div id="videoBigDiv">-->
+                <!--<center>-->
+                    <!--<div class="w3-center">USER</div>-->
+                    <!--<video id="bigVideo" src="" height="480" width="640"></video>-->
+                <!--</center>-->
+            <!--</div>-->
+            <!--<div id="videos">-->
+                <!--&lt;!&ndash;<span style="float: none">&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<video class="video-item" src="" height="240" width="320"></video>&ndash;&gt;-->
+                <!--&lt;!&ndash;</span>&ndash;&gt;-->
+            <!--</div>-->
+        <!--</div>-->
+        <!--<div id="wrapper-right" class="wrapper-right w3-quarter w3-border">-->
+            <!--<h3 class="w3-center w3-border-bottom">Participants</h3>-->
+            <!--<div id="chatSidebar" class="chat-sidebar">-->
+                <!--&lt;!&ndash;<div class="sidebar-name w3-border-bottom">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;<button class="w3-btn w3-tiny">Get Audio</button>&ndash;&gt;-->
+                <!--&lt;!&ndash;<button class="w3-btn w3-tiny" onclick="register_popup('narayan-prusty', 'Narayan Prusty');">Chat</button>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name w3-border-bottom">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');"><span>Narayan Prusty</span></a>&ndash;&gt;-->
+                <!--&lt;!&ndash;<button class="w3-btn w3-tiny">Get Audio</button>&ndash;&gt;-->
+                <!--&lt;!&ndash;<button class="w3-btn w3-tiny">Chat</button>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name w3-border-bottom">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');"><span>Narayan Prusty</span></a>&ndash;&gt;-->
+                <!--&lt;!&ndash;<button class="w3-btn w3-tiny">Get Audio</button>&ndash;&gt;-->
+                <!--&lt;!&ndash;<button class="w3-btn w3-tiny">Chat</button>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name w3-border-bottom">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');"><span>Narayan Prusty</span></a>&ndash;&gt;-->
+                <!--&lt;!&ndash;<button class="w3-btn w3-tiny">Get Audio</button>&ndash;&gt;-->
+                <!--&lt;!&ndash;<button class="w3-btn w3-tiny">Chat</button>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;&lt;!&ndash; Pass username and display name to register popup &ndash;&gt;&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('narayan-prusty', 'Narayan Prusty');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>Narayan Prusty</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('qnimate', 'QNimate');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>QNimate</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('qscutter', 'QScutter');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>QScutter</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('qidea', 'QIdea');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>QIdea</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('qazy', 'QAzy');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>QAzy</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+                <!--&lt;!&ndash;<div class="sidebar-name">&ndash;&gt;-->
+                <!--&lt;!&ndash;<a href="javascript:register_popup('qblock', 'QBlock');">&ndash;&gt;-->
+                <!--&lt;!&ndash;<span>QBlock</span>&ndash;&gt;-->
+                <!--&lt;!&ndash;</a>&ndash;&gt;-->
+                <!--&lt;!&ndash;</div>&ndash;&gt;-->
+            <!--</div>-->
+            <!--<div class="w3-border" style="height: 70%;">-->
+                <!--<h3 class="w3-center w3-border-bottom">Room Chat</h3>-->
+                <!--<ul id="publicChat" class="public-chat w3-ul" style="padding-left: 10px;">-->
+
+                <!--</ul>-->
+                <!--<input type="text" onkeyup="publicChatEnterKey(event, this);" placeholder="Send Message..." class="w3-input"  id="publicChatSend"/>-->
+            <!--</div>-->
+        <!--</div>-->
+    <!--</div>-->
+<!--</div>-->
+</body>
+</html>
